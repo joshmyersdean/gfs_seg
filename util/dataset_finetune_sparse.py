@@ -4,6 +4,7 @@ import cv2
 import numpy as np
 
 from torch.utils.data import Dataset
+from util.dataset_normal import get_random_indices
 import torch.nn.functional as F
 import torch
 import random
@@ -17,27 +18,6 @@ IMG_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.ppm', '.bmp', '.pgm']
 def is_image_file(filename):
     filename_lower = filename.lower()
     return any(filename_lower.endswith(extension) for extension in IMG_EXTENSIONS)
-
-def get_random_indices(label, sample_size=100):
-    h = 473#label.shape[0]  
-    w = 473#label.shape[1]
-    inds_tmp = []
-    indsi = []
-    indsj = []
-    for _ in range(sample_size):
-        i = np.random.randint(h)
-        j = np.random.randint(w)
-        arr = [i,j]
-        if arr in inds_tmp:
-            while arr in inds_tmp:
-                i = np.random.randint(h)
-                j = np.random.randint(w)
-                arr = [i,j]
-        indsi.append(i)
-        indsj.append(j)
-    return (np.asarray(indsi), np.asarray(indsj))
-
-
 
 
 def make_dataset(split=0, data_root=None, data_list=None, sub_list=None, exclude_list=None, class_list=None):    
@@ -107,12 +87,13 @@ def make_dataset(split=0, data_root=None, data_list=None, sub_list=None, exclude
 
 
 class SemData(Dataset):
-    def __init__(self, split=3, data_root=None, data_list=None, transform=None, mode='train', use_coco=False, use_split_coco=False):
+    def __init__(self, split=3, shot=10, data_root=None, data_list=None, transform=None, mode='train', use_coco=False, use_split_coco=False):
         assert mode in ['train', 'val', 'test']
         
         self.mode = mode
         self.split = split  
-        self.data_root = data_root   
+        self.data_root = data_root 
+        self.shot = shot  
         self.indices = []
 
         if not use_coco:
@@ -148,10 +129,7 @@ class SemData(Dataset):
                     self.sub_list = list(set(self.class_list) - set(self.sub_val_list))    
                 elif self.split == 0:
                     self.sub_val_list = list(range(1, 78, 4))
-                    self.sub_list = list(set(self.class_list) - set(self.sub_val_list)) 
-                elif self.split == 100:
-                    self.sub_list = list(range(1, 81)) 
-                    self.sub_val_list = []  
+                    self.sub_list = list(set(self.class_list) - set(self.sub_val_list))   
             else:
                 print('INFO: using COCO')
                 self.class_list = list(range(1, 81))
@@ -166,10 +144,7 @@ class SemData(Dataset):
                     self.sub_val_list = list(range(21, 41))
                 elif self.split == 0:
                     self.sub_list = list(range(21, 81)) 
-                    self.sub_val_list = list(range(1, 21))  
-                elif self.split == 100:
-                    self.sub_list = list(range(1, 81)) 
-                    self.sub_val_list = []
+                    self.sub_val_list = list(range(1, 21))   
 
         print('sub_list: ', self.sub_list)
         print('sub_val_list: ', self.sub_val_list)    
@@ -178,7 +153,20 @@ class SemData(Dataset):
             self.data_list, self.sub_class_file_list, self.indices = make_dataset(split, data_root, data_list, self.sub_list, exclude_list=self.sub_val_list, class_list=self.class_list)
         elif self.mode == 'val':
             self.data_list, self.sub_class_file_list, self.indices = make_dataset(split, data_root, data_list, self.class_list, class_list=self.class_list)
+        self.data_list = self.construct_query()
+
         self.transform = transform
+
+    def construct_query(self):
+        if self.mode == 'train':
+            query = []
+            for class_id in self.class_list:
+                query += random.sample(self.sub_class_file_list[class_id], k=min(self.shot, len(self.sub_class_file_list[class_id])))
+        else:
+            query = self.data_list
+        print('len of finetuning set: %d' % (len(query)))
+        np.random.shuffle(query)
+        return query
 
 
     def __len__(self):
@@ -197,15 +185,9 @@ class SemData(Dataset):
         raw_label = label.copy()
         if self.transform is not None:
             image, label = self.transform(image, label)
-#            assert 1 == 0, mask
             data = label[mask]
-            label = torch.ones_like(label) * 255
+            label = torch.ones_like(label)*255
             label[mask] = data
 
-        return image, label, mask
-
-        '''if self.mode == 'train':
-            return image, label
-        else:
-            return image, label, raw_label'''
+        return image, label
 
