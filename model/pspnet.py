@@ -27,7 +27,7 @@ class PPM(nn.Module):
 
 
 class PSPNet(nn.Module):
-    def __init__(self, layers=50, bins=(1, 2, 3, 6), dropout=0.1, classes=2, zoom_factor=8, use_ppm=True, criterion=nn.CrossEntropyLoss(ignore_index=255), pretrained=True):
+    def __init__(self, layers=50, bins=(1, 2, 3, 6), dropout=0.1, classes=2, zoom_factor=8, use_ppm=True, criterion=nn.CrossEntropyLoss(ignore_index=255), pretrained=True, ft_last=False):
         super(PSPNet, self).__init__()
         assert layers in [50, 101, 152]
         assert 2048 % len(bins) == 0
@@ -36,6 +36,7 @@ class PSPNet(nn.Module):
         self.zoom_factor = zoom_factor
         self.use_ppm = use_ppm
         self.criterion = criterion
+        self.ft_last = ft_last
 
         if layers == 50:
             resnet = models.resnet50(pretrained=pretrained)
@@ -61,13 +62,23 @@ class PSPNet(nn.Module):
         if use_ppm:
             self.ppm = PPM(fea_dim, int(fea_dim/len(bins)), bins)
             fea_dim *= 2
-        self.cls = nn.Sequential(
-            nn.Conv2d(fea_dim, 512, kernel_size=3, padding=1, bias=False),
-            nn.BatchNorm2d(512),
-            nn.ReLU(inplace=True),
-            nn.Dropout2d(p=dropout),
-            nn.Conv2d(512, classes, kernel_size=1)
-        )
+        if self.ft_last:
+            self.cls = nn.Sequential(
+                nn.Conv2d(fea_dim, 512, kernel_size=3, padding=1, bias=False),
+                nn.BatchNorm2d(512),
+                nn.ReLU(inplace=True),
+                nn.Dropout2d(p=dropout),
+            )
+            self.last = nn.Conv2d(512, classes, kernel_size=1)
+        
+        else:
+            self.cls = nn.Sequential(
+                nn.Conv2d(fea_dim, 512, kernel_size=3, padding=1, bias=False),
+                nn.BatchNorm2d(512),
+                nn.ReLU(inplace=True),
+                nn.Dropout2d(p=dropout),
+                nn.Conv2d(512, classes, kernel_size=1)
+            )
         if self.training:
             self.aux = nn.Sequential(
                 nn.Conv2d(1024, 256, kernel_size=3, padding=1, bias=False),
@@ -90,7 +101,11 @@ class PSPNet(nn.Module):
         x = self.layer4(x_tmp)
         if self.use_ppm:
             x = self.ppm(x)
-        x = self.cls(x)
+        if self.ft_last:
+            x = self.cls(x)
+            x = self.last(x)
+        else:
+            x = self.cls(x)
         if self.zoom_factor != 1:
             x = F.interpolate(x, size=(h, w), mode='bilinear', align_corners=True)
 
