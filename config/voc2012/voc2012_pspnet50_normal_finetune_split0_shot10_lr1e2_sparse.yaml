@@ -34,7 +34,7 @@ TRAIN:
   save_freq: 20
   evaluate_freq: 20
   save_path: exp/voc2012/pspnet50_normal_finetune_split0_shot10_lr1e2_sparse/model
-  weight:  pths/train_best.pth #exp/voc2012/pspnet50_normal_split0/model/train_epoch_50.pth # path to initial weight (default: none)
+  weight:  pths/train_epoch_50.pth #exp/voc2012/pspnet50_normal_split0/model/train_epoch_50.pth # path to initial weight (default: none)
   resume: False # path to latest checkpoint (default: none)
   evaluate: True  # evaluate on validation set, extra gpu memory needed and small batch_size_val is recommend
   fold: 0
@@ -60,8 +60,8 @@ TEST:
   has_prediction: False  # has prediction already or not
   index_start: 0  # evaluation start index in list
   index_step: 0  # evaluation step index in list, 0 means to end
-  test_gpu: [0,1,2,3]
-  model_path: pths/train_best.pth #exp/voc2012/pspnet50_normal_finetune_split0_shot10_lr1e2/model/train_best.pth  # evaluation model path
+  test_gpu: [0]
+  model_path: pths/train_best.pth #exp/voc2012/pspnet50_normal_finetune_split0_shot10_lr1e2_sparse/model/train_best.pth  # evaluation model path
   save_folder: exp/voc2012/pspnet50_normal_finetune_split0_shot10_lr1e2_sparse/result/best/val/ss  # results save folder
   colors_path: data/voc2012/voc2012_colors.txt  # path of dataset colors
   names_path: data/voc2012/voc2012_names.txt  # path of dataset category names

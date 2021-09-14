@@ -1,5 +1,4 @@
 import os
-import torch
 import os.path
 import cv2
 import numpy as np
@@ -13,6 +12,7 @@ IMG_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.ppm', '.bmp', '.pgm']
 def is_image_file(filename):
     filename_lower = filename.lower()
     return any(filename_lower.endswith(extension) for extension in IMG_EXTENSIONS)
+
 
 def make_dataset(split='train', data_root=None, data_list=None):
     assert split in ['train', 'val', 'test']
@@ -59,6 +59,7 @@ class SemData(Dataset):
         return len(self.data_list)
 
     def __getitem__(self, index):
+        assert 1 == 0
         image_path, label_path = self.data_list[index]
         image = cv2.imread(image_path, cv2.IMREAD_COLOR)  # BGR 3 channel ndarray wiht shape H * W * 3
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)  # convert cv2 read image from BGR order to RGB order

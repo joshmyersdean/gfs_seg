@@ -148,7 +148,7 @@ def main():
     if not args.has_prediction:
         if args.arch == 'psp':
             from model.pspnet import PSPNet
-            model = PSPNet(layers=args.layers, classes=args.classes, zoom_factor=args.zoom_factor, pretrained=False, ft_last=True)
+            model = PSPNet(layers=args.layers, classes=args.classes, zoom_factor=args.zoom_factor, pretrained=False, ft_last=False)
         elif args.arch == 'psa':
             from model.psanet import PSANet
             model = PSANet(layers=args.layers, classes=args.classes, zoom_factor=args.zoom_factor, compact=args.compact,
@@ -161,7 +161,7 @@ def main():
         if os.path.isfile(args.model_path):
             logger.info("=> loading checkpoint '{}'".format(args.model_path))
             checkpoint = torch.load(args.model_path)
-            model.load_state_dict(checkpoint['state_dict'], strict=False)
+            model.load_state_dict(checkpoint['state_dict'], strict=True)
             logger.info("=> loaded checkpoint '{}'".format(args.model_path))
         else:
             raise RuntimeError("=> no checkpoint found at '{}'".format(args.model_path))
