@@ -148,7 +148,7 @@ def main():
     if not args.has_prediction:
         if args.arch == 'psp':
             from model.pspnet import PSPNet
-            model = PSPNet(layers=args.layers, classes=args.classes, zoom_factor=args.zoom_factor, pretrained=False, ft_last=False)
+            model = PSPNet(layers=args.layers, classes=args.classes, zoom_factor=args.zoom_factor, pretrained=False, ft_last=args.ft_last)
         elif args.arch == 'psa':
             from model.psanet import PSANet
             model = PSANet(layers=args.layers, classes=args.classes, zoom_factor=args.zoom_factor, compact=args.compact,
