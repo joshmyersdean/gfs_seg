@@ -186,7 +186,7 @@ class SemData(Dataset):
 
     def __getitem__(self, index):
         image_path, label_path = self.data_list[index]
-        mask = self.indices[index]
+        #mask = self.indices[index]
         image = cv2.imread(image_path, cv2.IMREAD_COLOR) 
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)  
         image = np.float32(image)
@@ -198,11 +198,15 @@ class SemData(Dataset):
         if self.transform is not None:
             image, label = self.transform(image, label)
 #            assert 1 == 0, mask
-            data = label[mask]
-            label = torch.ones_like(label) * 255
-            label[mask] = data
+            tmp = label.clone()
+            if self.mode == 'train':
+                mask = torch.where(label > -1e6)
+                data = label[mask]
+                label = torch.ones_like(label) * 255
+                label[mask] = data
+            assert (tmp == label).all()
 
-        return image, label, mask
+        return image, label
 
         '''if self.mode == 'train':
             return image, label

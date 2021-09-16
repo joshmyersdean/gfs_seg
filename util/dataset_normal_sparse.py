@@ -4,7 +4,6 @@ import cv2
 import numpy as np
 
 from torch.utils.data import Dataset
-from util.dataset_normal import get_random_indices
 import torch.nn.functional as F
 import torch
 import random
@@ -19,6 +18,26 @@ def is_image_file(filename):
     filename_lower = filename.lower()
     return any(filename_lower.endswith(extension) for extension in IMG_EXTENSIONS)
 
+def get_random_indices(label, sample_size=100):
+    h = 473#label.shape[0]
+    w = 473#label.shape[1]
+    inds_tmp = []
+    indsi = []
+    indsj = []
+    for _ in range(sample_size):
+        i = np.random.randint(h)
+        j = np.random.randint(w)
+        arr = [i,j]
+        if arr in inds_tmp:
+            while arr in inds_tmp:
+                i = np.random.randint(h)
+                j = np.random.randint(w)
+                arr = [i,j]
+        indsi.append(i)
+        indsj.append(j)
+    return (np.asarray(indsi), np.asarray(indsj))
+
+
 
 def make_dataset(split=0, data_root=None, data_list=None, sub_list=None, exclude_list=None, class_list=None):    
     assert split in [0, 1, 2, 3, 10, 11, 100, 999]
@@ -31,7 +50,6 @@ def make_dataset(split=0, data_root=None, data_list=None, sub_list=None, exclude
     # which means the mask will be downsampled to 1/32 of the original size and the valid area should be larger than 2, 
     # therefore the area in original size should be accordingly larger than 2 * 32 * 32    
     image_label_list = []  
-    training_indices = []
     list_read = open(data_list).readlines()
     print("Processing data...".format(sub_list))
     sub_class_file_list = {}
@@ -47,9 +65,6 @@ def make_dataset(split=0, data_root=None, data_list=None, sub_list=None, exclude
         label_name = os.path.join(data_root, line_split[1])
         item = (image_name, label_name)
         label = cv2.imread(label_name, cv2.IMREAD_GRAYSCALE)
-        assert label is not None, label_name
-        inds = get_random_indices(label)
-        training_indices.append(inds)
         label_class = np.unique(label).tolist()
 
         if 0 in label_class:
@@ -83,18 +98,16 @@ def make_dataset(split=0, data_root=None, data_list=None, sub_list=None, exclude
     print("Checking image&label pair {} list done! ".format(split))
     print('After processing, {} images are left'.format(len(image_label_list)))
 
-    return image_label_list, sub_class_file_list, training_indices
+    return image_label_list, sub_class_file_list
 
 
 class SemData(Dataset):
-    def __init__(self, split=3, shot=10, data_root=None, data_list=None, transform=None, mode='train', use_coco=False, use_split_coco=False):
+    def __init__(self, split=3, data_root=None, data_list=None, transform=None, mode='train', use_coco=False, use_split_coco=False):
         assert mode in ['train', 'val', 'test']
         
         self.mode = mode
         self.split = split  
-        self.data_root = data_root 
-        self.shot = shot  
-        self.indices = []
+        self.data_root = data_root   
 
         if not use_coco:
             self.class_list = list(range(1, 21)) #[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
@@ -129,7 +142,10 @@ class SemData(Dataset):
                     self.sub_list = list(set(self.class_list) - set(self.sub_val_list))    
                 elif self.split == 0:
                     self.sub_val_list = list(range(1, 78, 4))
-                    self.sub_list = list(set(self.class_list) - set(self.sub_val_list))   
+                    self.sub_list = list(set(self.class_list) - set(self.sub_val_list)) 
+                elif self.split == 100:
+                    self.sub_list = list(range(1, 81)) 
+                    self.sub_val_list = []  
             else:
                 print('INFO: using COCO')
                 self.class_list = list(range(1, 81))
@@ -144,29 +160,19 @@ class SemData(Dataset):
                     self.sub_val_list = list(range(21, 41))
                 elif self.split == 0:
                     self.sub_list = list(range(21, 81)) 
-                    self.sub_val_list = list(range(1, 21))   
+                    self.sub_val_list = list(range(1, 21))  
+                elif self.split == 100:
+                    self.sub_list = list(range(1, 81)) 
+                    self.sub_val_list = []
 
         print('sub_list: ', self.sub_list)
         print('sub_val_list: ', self.sub_val_list)    
 
         if self.mode == 'train':
-            self.data_list, self.sub_class_file_list, self.indices = make_dataset(split, data_root, data_list, self.sub_list, exclude_list=self.sub_val_list, class_list=self.class_list)
+            self.data_list, self.sub_class_file_list = make_dataset(split, data_root, data_list, self.sub_list, exclude_list=self.sub_val_list, class_list=self.class_list)
         elif self.mode == 'val':
-            self.data_list, self.sub_class_file_list, self.indices = make_dataset(split, data_root, data_list, self.class_list, class_list=self.class_list)
-        self.data_list = self.construct_query()
-
+            self.data_list, self.sub_class_file_list = make_dataset(split, data_root, data_list, self.class_list, class_list=self.class_list)
         self.transform = transform
-
-    def construct_query(self):
-        if self.mode == 'train':
-            query = []
-            for class_id in self.class_list:
-                query += random.sample(self.sub_class_file_list[class_id], k=min(self.shot, len(self.sub_class_file_list[class_id])))
-        else:
-            query = self.data_list
-        print('len of finetuning set: %d' % (len(query)))
-        np.random.shuffle(query)
-        return query
 
 
     def __len__(self):
@@ -174,7 +180,6 @@ class SemData(Dataset):
 
     def __getitem__(self, index):
         image_path, label_path = self.data_list[index]
-        mask = self.indices[index]
         image = cv2.imread(image_path, cv2.IMREAD_COLOR) 
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)  
         image = np.float32(image)
@@ -185,10 +190,11 @@ class SemData(Dataset):
         raw_label = label.copy()
         if self.transform is not None:
             image, label = self.transform(image, label)
-            if self.mode == 'train':
-                data = label[mask]
-                label = torch.ones_like(label)*255
-                label[mask] = data
 
         return image, label
+
+        '''if self.mode == 'train':
+            return image, label
+        else:
+            return image, label, raw_label'''
 

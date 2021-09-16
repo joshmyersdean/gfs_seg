@@ -19,11 +19,11 @@ config=config/${dataset}/${dataset}_${exp_name}.yaml
 now=$(date +"%Y%m%d_%H%M%S")
 
 mkdir -p ${model_dir} ${result_dir}
-cp tool/train_finetune.sh tool/train_finetune.py tool/test.sh tool/test.py ${config} ${exp_dir}
+cp tool/train_finetune_dense.sh tool/train_finetune_dense.py tool/test.sh tool/test.py ${config} ${exp_dir}
 
 touch ${result_dir}/test-$now.log
 export PYTHONPATH=./
-$PYTHON -u ${exp_dir}/train_finetune.py \
+$PYTHON -u ${exp_dir}/train_finetune_dense.py \
   --config=${config} \
   2>&1 | tee ${model_dir}/train-$now.log
 

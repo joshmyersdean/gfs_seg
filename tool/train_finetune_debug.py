@@ -19,6 +19,7 @@ from tensorboardX import SummaryWriter
 
 from util import transform, config
 from util.util import AverageMeter, poly_learning_rate, intersectionAndUnionGPU, find_free_port
+from util import dataset_finetune#_sparse as dataset_finetune
 
 cv2.ocl.setUseOpenCL(False)
 cv2.setNumThreads(0)
@@ -121,18 +122,11 @@ def main_worker(gpu, ngpus_per_node, argss):
     criterion = nn.CrossEntropyLoss(ignore_index=args.ignore_label)
     if args.arch == 'psp':
         from model.pspnet import PSPNet
-        model = PSPNet(layers=args.layers, classes=args.classes, zoom_factor=args.zoom_factor, criterion=criterion, ft_last=args.ft_last)
-        if args.ft_last:
-            for param in model.parameters():
+        model = PSPNet(layers=args.layers, classes=args.classes, zoom_factor=args.zoom_factor, criterion=criterion)
+        for name, param in model.named_parameters():
+            if not ('cls' in name or 'ppm' in name):
                 param.requires_grad = False
-            model.last.weight.requires_grad = True
-            model.last.bias.requires_grad = True
-            modules_new = [model.last]
-        else:
-            for name, param in model.named_parameters():
-                if not ('cls' in name or 'ppm' in name):
-                    param.requires_grad = False
-            modules_new = [model.ppm, model.cls]
+        modules_new = [model.ppm, model.cls]
     elif args.arch == 'psa':
         from model.psanet import PSANet
         model = PSANet(layers=args.layers, classes=args.classes, zoom_factor=args.zoom_factor, psa_type=args.psa_type,
@@ -254,12 +248,6 @@ def main_worker(gpu, ngpus_per_node, argss):
         transform.Crop([args.train_h, args.train_w], crop_type='rand', padding=mean, ignore_label=args.ignore_label),
         transform.ToTensor(),
         transform.Normalize(mean=mean, std=std)])
-    if args.sparse_data:
-        from util import dataset_finetune_sparse as dataset_finetune
-        logging.info("USING SPARSE DATA=============")
-    else:
-        from util import dataset_finetune#_sparse as dataset_finetune
-        logging.info("===================USE NORMAL DATA")
     train_data = dataset_finetune.SemData(split=args.fold, shot=args.shot, data_root=args.data_root, \
                                 data_list=args.train_list, transform=train_transform, mode='train', \
                                 use_coco=args.use_coco, use_split_coco=args.use_split_coco)

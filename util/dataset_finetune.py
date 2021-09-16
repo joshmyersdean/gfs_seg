@@ -178,6 +178,12 @@ class SemData(Dataset):
         raw_label = label.copy()
         if self.transform is not None:
             image, label = self.transform(image, label)
-
+            tmp = label.clone()
+            if self.mode == 'train':
+                mask = torch.where(label > -1e6)
+                data = label[mask]
+                label = torch.ones_like(label) * 255
+                label[mask] = data
+            assert (tmp == label).all()
         return image, label
 

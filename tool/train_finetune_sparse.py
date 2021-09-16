@@ -122,14 +122,15 @@ def main_worker(gpu, ngpus_per_node, argss):
     criterion = nn.CrossEntropyLoss(ignore_index=args.ignore_label)
     if args.arch == 'psp':
         from model.pspnet import PSPNet
-        model = PSPNet(layers=args.layers, classes=args.classes, zoom_factor=args.zoom_factor, criterion=criterion, ft_last=args.ft_last)
-        for param in model.parameters():
-            param.requires_grad = False
-        model.last.weight.requires_grad = True
-        model.last.bias.requires_grad = True
+        model = PSPNet(layers=args.layers, classes=args.classes, zoom_factor=args.zoom_factor, criterion=criterion, ft_last=False)
+        for name, param in model.named_parameters():
+            if not ('cls' in name or 'ppm' in name):
+                param.requires_grad = False
+        #model.last.weight.requires_grad = True
+        #model.last.bias.requires_grad = True
         #print(list(filter(lambda p: p.requires_grad, model.parameters())))
         #assert 1 == 0
-        modules_new = [model.last]# if args.ft_last else [model.ppm, model.cls]
+        modules_new = [model.ppm, model.cls]# if args.ft_last else [model.ppm, model.cls]
     elif args.arch == 'psa':
         from model.psanet import PSANet
         model = PSANet(layers=args.layers, classes=args.classes, zoom_factor=args.zoom_factor, psa_type=args.psa_type,

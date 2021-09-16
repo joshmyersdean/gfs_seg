@@ -74,6 +74,56 @@ def main():
     logger.info("=> creating model ...")
     logger.info("Classes: {}".format(args.classes))
 
+    if not args.use_coco:
+        class_list = list(range(1, 21)) #[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
+        if args.fold == 3: 
+            sub_list = list(range(1, 16)) #[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]
+            sub_val_list = list(range(16, 21)) #[16,17,18,19,20]
+        elif args.fold == 2:
+            sub_list = list(range(1, 11)) + list(range(16, 21)) #[1,2,3,4,5,6,7,8,9,10,16,17,18,19,20]
+            sub_val_list = list(range(11, 16)) #[11,12,13,14,15]
+        elif args.fold == 1:
+            sub_list = list(range(1, 6)) + list(range(11, 21)) #[1,2,3,4,5,11,12,13,14,15,16,17,18,19,20]
+            sub_val_list = list(range(6, 11)) #[6,7,8,9,10]
+        elif args.fold == 0:
+            sub_list = list(range(6, 21)) #[6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
+            sub_val_list = list(range(1, 6)) #[1,2,3,4,5]
+        elif args.fold == 100:
+            sub_list = list(range(1, 21)) #[6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
+            sub_val_list = [] #[1,2,3,4,5]
+
+    else:
+        if args.use_split_coco:
+            print('INFO: evaluating with SPLIT COCO')
+            class_list = list(range(1, 81))
+            if args.fold == 3:
+                sub_val_list = list(range(4, 81, 4))
+                sub_list = list(set(class_list) - set(sub_val_list))                    
+            elif args.fold == 2:
+                sub_val_list = list(range(3, 80, 4))
+                sub_list = list(set(class_list) - set(sub_val_list))    
+            elif args.fold == 1:
+                sub_val_list = list(range(2, 79, 4))
+                sub_list = list(set(class_list) - set(sub_val_list))    
+            elif args.fold == 0:
+                sub_val_list = list(range(1, 78, 4))
+                sub_list = list(set(class_list) - set(sub_val_list))   
+        else:
+            print('INFO: using COCO')
+            class_list = list(range(1, 81))
+            if args.fold == 3:
+                sub_list = list(range(1, 61))
+                sub_val_list = list(range(61, 81))
+            elif args.fold == 2:
+                sub_list = list(range(1, 41)) + list(range(61, 81))
+                sub_val_list = list(range(41, 61))
+            elif args.fold == 1:
+                sub_list = list(range(1, 21)) + list(range(41, 81))
+                sub_val_list = list(range(21, 41))
+            elif args.fold == 0:
+                sub_list = list(range(21, 81)) 
+                sub_val_list = list(range(1, 21)) 
+
     value_scale = 255
     mean = [0.485, 0.456, 0.406]
     mean = [item * value_scale for item in mean]
@@ -98,7 +148,7 @@ def main():
     if not args.has_prediction:
         if args.arch == 'psp':
             from model.pspnet import PSPNet
-            model = PSPNet(layers=args.layers, classes=args.classes, zoom_factor=args.zoom_factor, pretrained=False, ft_last=False)
+            model = PSPNet(layers=args.layers, classes=args.classes, zoom_factor=args.zoom_factor, pretrained=False, ft_last=True)
         elif args.arch == 'psa':
             from model.psanet import PSANet
             model = PSANet(layers=args.layers, classes=args.classes, zoom_factor=args.zoom_factor, compact=args.compact,
@@ -111,13 +161,13 @@ def main():
         if os.path.isfile(args.model_path):
             logger.info("=> loading checkpoint '{}'".format(args.model_path))
             checkpoint = torch.load(args.model_path)
-            model.load_state_dict(checkpoint['state_dict'], strict=False)
+            model.load_state_dict(checkpoint['state_dict'], strict=True)
             logger.info("=> loaded checkpoint '{}'".format(args.model_path))
         else:
             raise RuntimeError("=> no checkpoint found at '{}'".format(args.model_path))
         test(test_loader, test_data.data_list, model, args.classes, mean, std, args.base_size, args.test_h, args.test_w, args.scales, gray_folder, color_folder, colors)
     if args.split != 'test':
-        cal_acc(test_data.data_list, gray_folder, args.classes, names)
+        cal_acc(test_data.data_list, gray_folder, args.classes, names, [0]+sub_list, sub_val_list)
 
 
 def net_process(model, image, mean, std=None, flip=True):
@@ -224,7 +274,7 @@ def test(test_loader, data_list, model, classes, mean, std, base_size, crop_h, c
     logger.info('<<<<<<<<<<<<<<<<< End Evaluation <<<<<<<<<<<<<<<<<')
 
 
-def cal_acc(data_list, pred_folder, classes, names):
+def cal_acc(data_list, pred_folder, classes, names, base_list, novel_list):
     intersection_meter = AverageMeter()
     union_meter = AverageMeter()
     target_meter = AverageMeter()
@@ -245,8 +295,11 @@ def cal_acc(data_list, pred_folder, classes, names):
     mIoU = np.mean(iou_class)
     mAcc = np.mean(accuracy_class)
     allAcc = sum(intersection_meter.sum) / (sum(target_meter.sum) + 1e-10)
+    mIoU_base = np.mean(iou_class[base_list])
+    mIoU_novel = np.mean(iou_class[novel_list])
 
     logger.info('Eval result: mIoU/mAcc/allAcc {:.4f}/{:.4f}/{:.4f}.'.format(mIoU, mAcc, allAcc))
+    logger.info('Eval result: mIoU_base/mIoU_novel {:.4f}/{:.4f}.'.format(mIoU_base, mIoU_novel))
     for i in range(classes):
         logger.info('Class_{} result: iou/accuracy {:.4f}/{:.4f}, name: {}.'.format(i, iou_class[i], accuracy_class[i], names[i]))
 

@@ -18,6 +18,7 @@ import torch.distributed as dist
 from tensorboardX import SummaryWriter
 
 from util import transform, config
+from util import dataset_finetune
 from util.util import AverageMeter, poly_learning_rate, intersectionAndUnionGPU, find_free_port
 
 cv2.ocl.setUseOpenCL(False)
@@ -121,18 +122,15 @@ def main_worker(gpu, ngpus_per_node, argss):
     criterion = nn.CrossEntropyLoss(ignore_index=args.ignore_label)
     if args.arch == 'psp':
         from model.pspnet import PSPNet
-        model = PSPNet(layers=args.layers, classes=args.classes, zoom_factor=args.zoom_factor, criterion=criterion, ft_last=args.ft_last)
-        if args.ft_last:
-            for param in model.parameters():
-                param.requires_grad = False
-            model.last.weight.requires_grad = True
-            model.last.bias.requires_grad = True
-            modules_new = [model.last]
-        else:
-            for name, param in model.named_parameters():
-                if not ('cls' in name or 'ppm' in name):
-                    param.requires_grad = False
-            modules_new = [model.ppm, model.cls]
+        model = PSPNet(layers=args.layers, classes=args.classes, zoom_factor=args.zoom_factor, criterion=criterion, ft_last=True)
+        for param in model.parameters():
+            param.requires_grad = False
+        model.last.weight.requires_grad = True
+        model.last.bias.requires_grad = True
+        import pdb
+        #print(list(filter(lambda p: p.requires_grad, model.parameters())))
+        #assert 1 == 0
+        modules_new = [model.last]# if args.ft_last else [model.ppm, model.cls]
     elif args.arch == 'psa':
         from model.psanet import PSANet
         model = PSANet(layers=args.layers, classes=args.classes, zoom_factor=args.zoom_factor, psa_type=args.psa_type,
@@ -159,7 +157,7 @@ def main_worker(gpu, ngpus_per_node, argss):
         args.batch_size = int(args.batch_size / ngpus_per_node)
         args.batch_size_val = int(args.batch_size_val / ngpus_per_node)
         args.workers = int((args.workers + ngpus_per_node - 1) / ngpus_per_node)
-        model = torch.nn.parallel.DistributedDataParallel(model.cuda(), device_ids=[gpu])
+        model = torch.nn.parallel.DistributedDataParallel(model.cuda(), device_ids=[gpu], find_unused_parameters=True)
     else:
         model = torch.nn.DataParallel(model.cuda())
 
@@ -169,6 +167,7 @@ def main_worker(gpu, ngpus_per_node, argss):
                 logger.info("=> loading weight '{}'".format(args.weight))
             checkpoint = torch.load(args.weight)
             model.load_state_dict(checkpoint['state_dict'], strict=True)
+            pdb.set_trace()
             if main_process():
                 logger.info("=> loaded weight '{}'".format(args.weight))
         else:
@@ -254,12 +253,6 @@ def main_worker(gpu, ngpus_per_node, argss):
         transform.Crop([args.train_h, args.train_w], crop_type='rand', padding=mean, ignore_label=args.ignore_label),
         transform.ToTensor(),
         transform.Normalize(mean=mean, std=std)])
-    if args.sparse_data:
-        from util import dataset_finetune_sparse as dataset_finetune
-        logging.info("USING SPARSE DATA=============")
-    else:
-        from util import dataset_finetune#_sparse as dataset_finetune
-        logging.info("===================USE NORMAL DATA")
     train_data = dataset_finetune.SemData(split=args.fold, shot=args.shot, data_root=args.data_root, \
                                 data_list=args.train_list, transform=train_transform, mode='train', \
                                 use_coco=args.use_coco, use_split_coco=args.use_split_coco)

@@ -22,6 +22,7 @@ mkdir -p ${model_dir} ${result_dir}
 cp tool/train_normal.sh tool/train_normal.py tool/test.sh tool/test.py ${config} ${exp_dir}
 
 export PYTHONPATH=./
+touch ${model_dir}/train-$now.log
 $PYTHON -u ${exp_dir}/train_normal.py \
   --config=${config} \
   2>&1 | tee ${model_dir}/train-$now.log
